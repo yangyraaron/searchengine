@@ -109,16 +109,26 @@ class SearchDb(object):
         except Exception, e:
             logger.error(
                 u'get word {} from database error'.format(word), exc_info=True)
+            return None
+
+    def getWords(self,words):
+        if not self._verifyConnection(): return
+
+        try:
+            return self.db.words.find({'word':{'$in':words}})
+        except Exception, e:
+            logger.error(u'get words error',exc_info=True)
+            return None
+
 
     def addWordLocation(self, urlId, wordId, location):
     	if not self._verifyConnection(): return
 
         try:
-            return self.db.wordlocations.insert({'urlId': urlId, 'wordId': wordId, 'location': location})
+            self.db.wordlocations.insert({'urlId':urlId,'wordId':wordId,'location':location})
         except Exception, e:
             logger.error(
                 u'add word {} location error'.format(wordId), exc_info=True)
-            return None
 
     def hasUrlAndWords(self, url):
     	if not self._verifyConnection(): return

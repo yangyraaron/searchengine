@@ -50,7 +50,7 @@ logging = {
     },
     'loggers': {
         app['name']: {
-            'handlers': ['console','info_file_handler', 'error_file_handler'],
+            'handlers': ['console', 'error_file_handler'],
             'propagate': True,
             'level': 'DEBUG',
         },
