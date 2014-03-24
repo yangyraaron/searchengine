@@ -126,26 +126,27 @@ class Searcher:
     def __init__(self):
         self.db = searchdb.SearchDb()
 
-    def _addWordLocationToDic(self,dic,wordLocations):
+    def _addWordLocationToDic(self, dic, wordLocations):
         for wl in wordLocations:
-            if dic[wl['urlId']] is None:
-                dic[wl['urlId']] = []
+            key = wl['urlId']
+            value = dic.get(key)
+            if value is None:
+                value = []
 
-            dic[wl['urlId']].append(wl)
+            value.append(wl)
+            dic[key] = value
 
-    def _aggrateWordLocations(self,dic):
+    def _aggregateWordLocations(self, dic):
         result = []
-        for urlId,wls in dic:
+        for urlId, wls in dic.iteritems():
             locs = []
             locs.append(urlId)
             for wl in wls:
                 locs.append(wl['location'])
 
-            result.append[locs]
+            result.append(locs)
 
         return result
-
-
 
     def getMatchUrls(self, q):
         words = q.split(' ')
@@ -153,25 +154,33 @@ class Searcher:
         wordItems = self.db.getWords(words)
         wordIds = [w['_id'] for w in wordItems]
 
-        wordLocs = self.db.getDb().wordlocations.find('wordId': wordIds[0])
-        if wordLocs is None: return None
+        wordLocs = self.db.getDb().wordlocations.find(
+            {'wordId': wordIds[0]}, {'_id': 0})
+
+        if wordLocs is None:
+            return None
 
         wordDic = {}
-        self._addWordLocationToDic(wordLocs)
+        self._addWordLocationToDic(wordDic, wordLocs)
 
         for wd in wordIds[1:]:
-            if wordLocs is None or len(wordLocs)==0:
+            if wordLocs is None or wordLocs.count() == 0:
                 break
-            wordLocs = self.db.getDb().wordlocations.find(
-                {'urlId': {'$in': wordLocs}, 'wordId': wd})
-            self._addWordLocationToDic(wordLocs)
 
-        return self._aggrateWordLocations(wordDic), wordIds
+            urlIds = [wl['urlId'] for wl in wordLocs]
+            wordLocs = self.db.getDb().wordlocations.find(
+                {'urlId': {'$in': urlIds}, 'wordId': wd}, {'_id': 0})
+
+            self._addWordLocationToDic(wordDic, wordLocs)
+
+        return self._aggregateWordLocations(wordDic), wordIds
 
     def getScoredList(self, wordLocs, wordIds):
-        totalScores = dict([(wl['urlId'], 0) for wl in wordLocs])
+        totalScores = dict([(wl[0], 0) for wl in wordLocs])
 
-        weights = [(1.0, self.frequencyScore(wordLocs))]
+        weights = [(1.0, self.frequencyScore(wordLocs)),
+                   (1.5, self.locationScore(wordLocs)),
+                   (1.0, self.distanceScore(wordLocs))]
 
         for (weight, scores) in weights:
             for url in totalScores:
@@ -191,15 +200,31 @@ class Searcher:
             return dict([(u, float(c) / maxscore) for u, c in scores.items()])
 
     def frequencyScore(self, wordLocs):
-        counts = dict([(wl['urlId'], 0) for wl in wordLocs])
+        counts = dict([(wl[0], 0) for wl in wordLocs])
         for wl in wordLocs:
-            counts[wl['urlId']] += 1
+            counts[wl[0]] = len(wl)
         return self.normalizeScores(counts)
 
     def locationScore(self, wordLocs):
-        locations = dict([(wl['urlId'], 1000000) for wl in wordLocs])
+        locations = dict([(wl[0], 1000000) for wl in wordLocs])
         for wl in wordLocs:
-            loc = sum(wl[''])
+            loc = sum(wl[1:])
+            if loc < locations[wl[0]]:
+                locations[wl[0]] = loc
+
+        return self.normalizeScores(locations, True)
+
+    def distanceScore(self, wordLocs):
+        scores = dict([(wl[0], 1000000) for wl in wordLocs])
+
+        for wl in wordLocs:
+            if len(wl)<=2:
+                continue
+            dist = sum([abs(wl[i] - wl[i - 1]) for i in range(2, len(wl))])
+            if dist < scores[wl[0]]:
+                scores[wl[0]] = dist
+
+        return self.normalizeScores(scores, True)
 
     def query(self, q):
         wordLocs, wordIds = self.getMatchUrls(q)

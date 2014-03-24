@@ -20,7 +20,7 @@ class Application:
 
 	def run(self):
 		searcher = engine.Searcher()
-		searcher.query('mongo')
+		searcher.query('list append')
 
 
 def main():
